@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Quickstart - The Diplomat Book</title>
+        <title>C - The Diplomat Book</title>
 
 
         <!-- Custom HTML head -->
@@ -174,71 +174,292 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="quickstart"><a class="header" href="#quickstart">Quickstart</a></h1>
-<p>Demo Gen takes a bit of configuration if you don’t already have your own Diplomat library set up.</p>
-<p>For that reason, we have a <a href="https://github.com/rust-diplomat/demo-gen-quickstart">quickstart repository</a>. You can also follow along in your own library if you’d like.</p>
-<h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
-<p>You’ll need to clone <a href="https://github.com/rust-diplomat/demo-gen-quickstart">the repository</a>.</p>
-<p>You’ll need to have Rust, Cargo, and the <code>wasm32-unknown-unknown</code> target installed:</p>
-<pre><code class="language-sh">rustup target add wasm32-unknown-unknown
+                        <h1 id="c-backend"><a class="header" href="#c-backend">C Backend</a></h1>
+<h2 id="type-conversion"><a class="header" href="#type-conversion">Type Conversion</a></h2>
+<p>The C ABI is the backend by most backends access Diplomat’s bindings (with the current exception of JS, which uses WebAssembly’s ABI). So most backends will use the following types underlying most of their generation:</p>
+<h3 id="primitives"><a class="header" href="#primitives">Primitives</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Rust Type</th><th>C Type</th></tr>
+</thead>
+<tbody>
+<tr><td>u8</td><td>uint8_t</td></tr>
+<tr><td>u16</td><td>uint16_t</td></tr>
+<tr><td>u32</td><td>uint32_t</td></tr>
+<tr><td>u64</td><td>uint64_t</td></tr>
+<tr><td>u128</td><td>unsupported</td></tr>
+<tr><td>i8</td><td>int8_t</td></tr>
+<tr><td>i16</td><td>int16_t</td></tr>
+<tr><td>i32</td><td>int32_t</td></tr>
+<tr><td>i64</td><td>int64_t</td></tr>
+<tr><td>i128</td><td>unsupported</td></tr>
+<tr><td>bool</td><td>bool</td></tr>
+<tr><td>char</td><td>char32_t</td></tr>
+<tr><td>isize</td><td>intptr_t</td></tr>
+<tr><td>usize</td><td>size_t</td></tr>
+<tr><td>f32</td><td>float</td></tr>
+<tr><td>f64</td><td>double</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="struct-types"><a class="header" href="#struct-types">Struct Types</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Diplomat Type</th><th>C Type</th></tr>
+</thead>
+<tbody>
+<tr><td><code>#[diplomat::opaque] pub struct Type</code></td><td><code>struct Type*</code></td></tr>
+<tr><td><code>pub struct Type</code></td><td><code>struct Type{...}</code></td></tr>
+<tr><td><code>pub enum Type</code></td><td><code>enum Type</code></td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="opaques"><a class="header" href="#opaques">Opaques</a></h4>
+<p>Opaques are represented as pointers to zero-sized structs.</p>
+<h4 id="structs"><a class="header" href="#structs">Structs</a></h4>
+<p>Structs are represented as simple C structs; each member is converted into the relevant C type as detailed here.</p>
+<h4 id="enums"><a class="header" href="#enums">Enums</a></h4>
+<p>Diplomat does not support tagged enums, so all Rust enums are simply C enums.</p>
+<h3 id="options"><a class="header" href="#options">Options</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Diplomat Type</th><th>C Type</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Option&lt;PrimitiveName&gt;</code> or <code>DiplomatOption&lt;PrimitiveName&gt;</code></td><td><code>OptionPrimitiveName</code></td></tr>
+<tr><td><code>Option&lt;StructName&gt;</code> or <code>Option&lt;EnumName&gt;</code></td><td><code>TypeName_option</code></td></tr>
+<tr><td><code>Option&lt;Box&lt;OpaqueName&gt;&gt;</code> or <code>Option&lt;&amp;OpaqueName&gt;</code></td><td><code>struct Type*</code></td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="primitive-options"><a class="header" href="#primitive-options">Primitive Options</a></h4>
+<p>Diplomat’s C backend has custom structs included in <code>diplomat_runtime.h</code> which are named <code>Diplomat{PrimitiveName}View</code>.</p>
+<p><code>PrimitiveName</code> is the Rust primitive’s name (but in UpperCamelCase). These have the following format:</p>
+<pre><code class="language-c">typedef struct OptionPrimitiveName {
+    union { CPrimitiveType* ok;};
+    bool is_ok;
+} OptionPrimitiveName;
 </code></pre>
-<p>You’ll also need <code>Node</code> and <code>npm</code> <a href="https://nodejs.org/en/download/package-manager">installed</a>, as Diplomat generates JS code in modules that is easier for Node to parse as a package.</p>
-<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
-<p>You just need to run (in the repository folder):</p>
-<pre><code class="language-sh">cargo build -p adder_bindings --target wasm32-unknown-unknown
-cargo run -p generator
-cp target/wasm32-unknown-unknown/debug/adder_bindings.wasm adder_bindings/demo
+<p>Options of Primitive slices have the same name as <a href="#slices">Diplomat’s slice types</a>, but with <code>Option</code> prepended.</p>
+<h4 id="struct-and-enum-options"><a class="header" href="#struct-and-enum-options">Struct and Enum Options</a></h4>
+<p>Structs and enums will generate a <code>TypeName_option</code> struct, with a similar layout as the primitive option above:</p>
+<pre><code class="language-c">typedef struct TypeName_option {
+    union { TypeName ok; };
+    bool is_ok;
+} TypeName_option;
 </code></pre>
-<p>You’ll notice the <code>demo</code> folder now has a <code>demo_gen</code> folder, which is full of JS and rendering files. We can view our results in an HTTP server:</p>
-<pre><code class="language-sh">npm -C adder_bindings/demo install
-npm -C adder_bindings/demo run start
+<h4 id="opaque-options"><a class="header" href="#opaque-options">Opaque Options</a></h4>
+<p>Options of opaques are treated as nullable pointers in the C ABI.</p>
+<h3 id="results"><a class="header" href="#results">Results</a></h3>
+<p>For each function that returns a result, the C backend will generate the following struct:</p>
+<pre><code class="language-c">typedef struct FunctionName_result {
+    union {
+        SuccessType ok;
+        ErrorType err;
+    };
+    bool is_ok;
+} FunctionName_result;
 </code></pre>
-<p>If you open the server, you should see a webpage listing <code>AddResult.getAddStr</code> with a link. If you click the link, you should see something like:</p>
-<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="images/demo_output.png" alt="A search bar for the web server, with the added URL /demo_gen/rendering/template.html?func=AddResult.getAddStr. Displayed on the webpage is “AddResult.getAddStr” in large text. Below are two inputs: one labelled “left” that has a value of 1, and one labelled “right” that has a value of 2. Below is a submit button. There is output below the button, with the label “Output” and a value of 3."><span class="img-wrapper"><img src="images/demo_output.png" alt="A search bar for the web server, with the added URL /demo_gen/rendering/template.html?func=AddResult.getAddStr. Displayed on the webpage is “AddResult.getAddStr” in large text. Below are two inputs: one labelled “left” that has a value of 1, and one labelled “right” that has a value of 2. Below is a submit button. There is output below the button, with the label “Output” and a value of 3."></span></label></p>
-<p>And that’s it! Let’s talk about what each step means.</p>
-<h1 id="what-we-just-accomplished"><a class="header" href="#what-we-just-accomplished">What We Just Accomplished</a></h1>
-<p>When you clone the repository, you’ll notice three packages.</p>
-<h2 id="the-library"><a class="header" href="#the-library">The Library</a></h2>
-<p><code>basic_adder</code> is our Rust library that we want to make examples of. It only has one function:</p>
-<pre><code class="language-rs">pub fn add(left: u64, right: u64) -&gt; u64 {
-    left + right
-}
+<p>Where <code>SuccessType</code> and <code>ErrorType</code> are converted from the given rust type into a C ABI friendly type, as described here.</p>
+<h3 id="slices"><a class="header" href="#slices">Slices</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Diplomat Type</th><th>C Type</th></tr>
+</thead>
+<tbody>
+<tr><td><code>&amp;[Primitive]</code></td><td><code>DiplomatPrimitiveView</code></td></tr>
+<tr><td><code>&amp;mut[Primitive]</code></td><td><code>DiplomatPrimitiveViewMut</code></td></tr>
+<tr><td><code>&amp;str</code> or <code>&amp;DiplomatStr</code> or <code>DiplomatStrSlice</code> or <code>DiplomatUtf8StrSlice</code></td><td><code>DiplomatStringView</code></td></tr>
+<tr><td><code>&amp;DiplomatStr16</code> or <code>DiplomatStr16Slice</code></td><td><code>DiplomatString16View</code></td></tr>
+<tr><td><code>&amp;[&amp;str] or &amp;[DiplomatStrSlice]</code> or <code>&amp;[DiplomatUtf8StrSlice]</code></td><td><code>DiplomatStringsView</code></td></tr>
+<tr><td><code>&amp;[DiplomatStr16Slice]</code></td><td><code>DiplomatStrings16View</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>PrimitiveName</code> is the Rust primitive’s name (but in UpperCamelCase). These have the following format:</p>
+<pre><code class="language-c">typedef struct DiplomatPrimitiveNameView {
+    const CPrimitiveType* data;
+    size_t len;
+};
 </code></pre>
-<p>Everything else we build will be based on this.</p>
-<h2 id="the-bindings"><a class="header" href="#the-bindings">The Bindings</a></h2>
-<p><code>adder_bindings</code> is our <a href="../basics.html">Diplomat bridge</a>. When we want to make our library accessible in other languages, we need to run <code>diplomat-tool</code> on these bindings.</p>
-<p>We build these bundings with</p>
-<pre><code class="language-sh">cargo build -p adder_bindings --target wasm32-unknown-unknown
+<h4 id="primitive-slices"><a class="header" href="#primitive-slices">Primitive Slices</a></h4>
+<p>Diplomat’s C backend has custom structs included in <code>diplomat_runtime.h</code> which are named <code>Diplomat{PrimitiveName}View</code>.</p>
+<h4 id="opaque-slices"><a class="header" href="#opaque-slices">Opaque Slices</a></h4>
+<p>As with primitive slices, there is a generated <code>Diplomat{OpaqueName}View</code> slice.</p>
+<p>There is also a <code>DiplomatPrimitiveViewMut</code> struct for slices with mutable pointers.</p>
+<h3 id="diplomatwrite"><a class="header" href="#diplomatwrite">DiplomatWrite</a></h3>
+<p>In the C ABI, <code>DiplomatWrite</code> is defined in <code>diplomat_runtime.h</code>:</p>
+<pre><code class="language-c">typedef struct DiplomatWrite {
+    void* context;
+    char* buf;
+    size_t len;
+    size_t cap;
+    bool grow_failed;
+    void (*flush)(struct DiplomatWrite*);
+    bool (*grow)(struct DiplomatWrite*, size_t);
+} DiplomatWrite;
 </code></pre>
-<p><code>--target wasm32-unknown-unknown</code> tells <code>cargo</code> to build a <code>.wasm</code> file.</p>
-<p>For more on how you can explicitly configure your bindings to work better in demos, see <a href="attributes.html">the chapter on attributes</a>.</p>
-<h2 id="the-generator"><a class="header" href="#the-generator">The Generator</a></h2>
-<p><code>generator</code> is our wrapper for calling <code>diplomat-tool</code>. demo_gen is still in progress, and so we need a wayt to use the latest version of <code>diplomat-tool</code> to use this experimental backend. <code>generator</code> may be removed in future versions of this tutorial.</p>
-<p>We run the generator with</p>
-<pre><code class="language-sh">cargo run -p generator
+<p>The C bindings expose the default implementation through the functions:</p>
+<pre><code class="language-c">DiplomatWrite diplomat_simple_write(char* buf, size_t buf_size);
+
+DiplomatWrite* diplomat_buffer_write_create(size_t cap);
+char* diplomat_buffer_write_get_bytes(DiplomatWrite* t);
+size_t diplomat_buffer_write_len(DiplomatWrite* t);
+void diplomat_buffer_write_destroy(DiplomatWrite* t);
 </code></pre>
-<p>And it performs the equivalent of:</p>
-<pre><code class="language-sh">diplomat-tool demo_gen adder_bindings/demo/demo_gen --entry adder_bindings/src/lib.rs
+<p>Which you can use to easily construct a <code>DiplomatWrite</code> for use. See <a href="../types/write.html">the chapter on DiplomatWrite</a> for more.</p>
+<h3 id="traits"><a class="header" href="#traits">Traits</a></h3>
+<p>For each trait, the C backend will generate a <code>Trait</code> struct and a <code>VTable</code> struct:</p>
+<pre><code class="language-c">typedef struct DiplomatTraitStruct_TraitName {
+    void *data;
+    TraitName_VTable vtable;
+} DiplomatTraitStruct_TraitName;
+
+typedef struct TraitName_VTable {
+    void (*destructor)(const void*);
+    size_t SIZE; size_t ALIGNMENT;
+    /* ... */
+} TraitName_VTable;
 </code></pre>
-<p>demo_gen will automatically generate JS bindings by default, along with a bunch of other files to help you get started as easily as possible. If you have JS bindings elsewhere, or a different file structure from the Quickstart repository, you can configure how demo_gen works with a library config file. See <a href="markup.html">the section on markup generation for more</a>.</p>
-<h2 id="the-web-demo"><a class="header" href="#the-web-demo">The Web Demo</a></h2>
-<p>demo_gen is designed to work with most Diplomat libraries with minimal configuration. However, we currently don’t provide <em>everything</em> that you’ll need to instantly see a demo</p>
-<p>The minimum requirement is at least a web server to load JS modules.</p>
-<p>This is why we have you run</p>
-<pre><code class="language-sh">npm -C adder_bindings/demo install
-npm -C adder_bindings/demo run start
+<p>Where <code>data</code> is a pointer to the type that implements the VTable.</p>
+<p>The VTable contains all of the pointers to the functions which implement the trait. <code>destructor</code> should be the destructor for <code>void* data</code>. <code>SIZE</code> and <code>ALIGNMENT</code> represent the size and the alignment of the <code>void* data</code> pointer.</p>
+<h3 id="callbacks"><a class="header" href="#callbacks">Callbacks</a></h3>
+<p>Callback arguments generate a struct:</p>
+<pre><code class="language-c">typedef struct DiplomatCallback_FunctionName_ParameterName {
+    const void* data;
+    void (*run_callback)(const void*, /*...*/);
+    void (*destructor)(const void*);
+} DiplomatCallback_FunctionName_ParameterName;
 </code></pre>
-<p>See the chapter on <a href="./renderer.html">the renderer</a> for more.</p>
+<p><code>data</code> represents the pointer to the <code>DiplomatCallback_FunctionName_ParameterName</code> struct in C. <code>run_callback</code> is a pointer to the C function that implements the callback, and <code>destructor</code> is a pointer to the destructor for <code>data</code>. <code>destructor</code> and <code>data</code> can both be nullptrs if there is no data associated with the callback (i.e., if in C++ you are only passing in a function, not a function and a pointer).</p>
+<h2 id="supports"><a class="header" href="#supports">Supports</a></h2>
+<ul>
+<li>
+<p><input disabled="" type="checkbox"> <a href="../attrs/namespace.html">Namespaces</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox" checked=""> Memory Sharing</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> Non Exhaustive Structs</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> Method Overloading</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox" checked=""> UTF8 Strings</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox" checked=""> UTF16 Strings</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox" checked=""> <a href="../types/slices.html">Static Slices</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> <a href="../attrs/default_value.html#default-value">Defaults</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> <a href="../attrs/constructors.html">Constructors</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> Named Constructors</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> Fallible Constructors</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> <a href="../attrs/accessors.html">Getters/Setters</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> Static Getters/Setters</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> <a href="../attrs/stringifiers.html">Stringifiers</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> <a href="../attrs/comparators.html">Comparators</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> <a href="../attrs/comparators.html#partial-comparisons">Partial Comparators</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> <a href="../attrs/iterators.html">Iterators</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> <a href="../attrs/iterators.html#marking-a-type-as-an-iterable">Iterables</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> <a href="../attrs/indexing.html">Indexers</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> <a href="../attrs/arithmetic.html">Arithmetic</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox" checked=""> <a href="../types/option.html">Options</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox" checked=""> <a href="../types/callbacks.html">Callbacks</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox" checked=""> <a href="../types/traits.html">Traits</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> Custom Errors</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> Traits are Send</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> Traits are Sync</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> Generate Mocking Interface</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox" checked=""> <a href="../types/slices.html#primitive-structs">ABI Compatible Structs</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox" checked=""> Struct References. See <a href="../attrs/references.html">References for more</a>.</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox" checked=""> Mutable Struct References. See <a href="../attrs/references.html">References for more</a>.</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox" checked=""> Free Functions</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> <a href="../attrs/custom_extra_code.html">Custom Bindings</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> Owned Slices</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> <a href="../attrs/default_value.html#default-arguments">Default Arguments</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox" checked=""> Mutable Slices (<code>&amp;mut [T]</code>)</p>
+</li>
+<li>
+<p><input disabled="" type="checkbox" checked=""> <a href="../types/slices.html#opaques">Opaque Slices</a></p>
+</li>
+<li>
+<p><input disabled="" type="checkbox"> Tuples. See <a href="../attrs/tuples.html">tuples for more</a></p>
+</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../demo_gen/intro.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../backends/intro.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../demo_gen/attributes.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../backends/cpp.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -248,11 +469,11 @@ npm -C adder_bindings/demo run start
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../demo_gen/intro.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../backends/intro.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../demo_gen/attributes.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../backends/cpp.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
